@@ -114,6 +114,7 @@ _enxb_backend_surface_destroy_notify(struct wl_listener *listener, void *data)
     ENXBBackendSurface *self = wl_container_of(listener, self, destroy_listener);
 
     cairo_surface_destroy(self->cairo_surface);
+    weston_buffer_reference(&self->buffer_ref, NULL);
 
     g_free(self);
 }
