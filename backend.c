@@ -731,7 +731,7 @@ _enxb_backend_init(struct weston_compositor *compositor, ENXBBackendConfig *conf
     gint screen;
     backend->source = g_water_xcb_source_new(NULL, NULL, &screen, _enxb_backend_event_callback, backend, NULL);
     if ( backend->source == NULL )
-        return FALSE;
+        goto fail;
 
     backend->xcb_connection = g_water_xcb_source_get_connection(backend->source);
     backend->screen_number = screen;
@@ -745,7 +745,7 @@ _enxb_backend_init(struct weston_compositor *compositor, ENXBBackendConfig *conf
     if ( ! extension_query->present )
     {
         g_warning("No RandR extension");
-        return -1;
+        goto fail;
     }
     backend->randr_event_base = extension_query->first_event;
     xcb_randr_select_input(backend->xcb_connection, backend->screen->root,
@@ -856,6 +856,12 @@ _enxb_backend_init(struct weston_compositor *compositor, ENXBBackendConfig *conf
     backend->views = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
 
     return TRUE;
+
+fail:
+    if ( backend->source )
+        g_water_xcb_source_free(backend->source);
+    g_free(backend);
+    return FALSE;
 }
 
 EVENTD_EXPORT int
