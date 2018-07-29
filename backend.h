@@ -22,7 +22,7 @@
 
 #pragma once
 
-#define EVENTD_ND_X11_BRIDGE_BACKEND_CONFIG_VERSION 1
+#define ENXB_BACKEND_CONFIG_VERSION 1
 
 typedef struct {
     struct weston_backend_config base;

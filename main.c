@@ -38,12 +38,7 @@ typedef struct {
     struct wl_display *display;
     GMainLoop *loop;
     struct weston_compositor *compositor;
-    struct wl_listener heads_changed_listener;
     ENXBBackendConfig backend_config;
-    const struct weston_windowed_output_api *windowed_api;
-    struct weston_layer background_layer;
-    struct weston_surface *background;
-    struct weston_view *background_view;
 } ENXBContext;
 
 static int
@@ -109,7 +104,7 @@ main()
     /* Just using NULL here will use environment variables */
     weston_compositor_set_xkb_rule_names(context->compositor, NULL);
 
-    context->backend_config.base.struct_version = EVENTD_ND_X11_BRIDGE_BACKEND_CONFIG_VERSION;
+    context->backend_config.base.struct_version = ENXB_BACKEND_CONFIG_VERSION;
     context->backend_config.base.struct_size = sizeof(ENXBBackendConfig);
     g_setenv("WESTON_MODULE_MAP", "x11-backend.so=" BUILD_DIR G_DIR_SEPARATOR_S "eventd-nd-x11-bridge." G_MODULE_SUFFIX, TRUE);
     if ( weston_compositor_load_backend(context->compositor, WESTON_BACKEND_X11, &context->backend_config.base) < 0 )
@@ -127,9 +122,6 @@ main()
         weston_log("Couldn’t add socket: %s\n", strerror(errno));
         return -1;
     }
-
-    setenv("WAYLAND_DISPLAY", socket_name, 1);
-    unsetenv("DISPLAY");
 
     weston_compositor_wake(context->compositor);
 

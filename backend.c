@@ -42,7 +42,6 @@
 #include <xcb/xkb.h>
 #include <xcb/xcb_ewmh.h>
 #include <xcb/xfixes.h>
-#include <xcb/shape.h>
 #include <xkbcommon/xkbcommon-x11.h>
 
 #include "backend.h"
@@ -65,7 +64,6 @@ typedef struct {
     gboolean compositing;
     gboolean custom_map;
     gboolean xfixes;
-    gboolean shape;
     xcb_ewmh_connection_t ewmh;
     gint randr_event_base;
     guint8 xkb_event_base;
@@ -115,9 +113,7 @@ _enxb_backend_surface_destroy_notify(struct wl_listener *listener, void *data)
 {
     ENXBBackendSurface *self = wl_container_of(listener, self, destroy_listener);
 
-    //g_close(self->shm_fd, NULL);
     cairo_surface_destroy(self->cairo_surface);
-    g_debug("DESTROY shm");
 
     g_free(self);
 }
@@ -149,27 +145,24 @@ _enxb_backend_surface_from_weston_surface(ENXBBackend *backend, struct weston_su
     return _enxb_backend_surface_new(backend, surface);
 }
 
-static int _enxb_renderer_read_pixels(struct weston_output *output, pixman_format_code_t format, void *pixels, uint32_t x, uint32_t y, uint32_t width, uint32_t height)
+static int
+_enxb_renderer_read_pixels(struct weston_output *output, pixman_format_code_t format, void *pixels, uint32_t x, uint32_t y, uint32_t width, uint32_t height)
 {
-    ENXBBackend *backend = wl_container_of(output->compositor->backend, backend, base);
-    g_debug("read pixels");
     return -1;
 }
 
-static void _enxb_renderer_repaint_output(struct weston_output *output, pixman_region32_t *output_damage)
+static void
+_enxb_renderer_repaint_output(struct weston_output *output, pixman_region32_t *output_damage)
 {
-    ENXBBackend *backend = wl_container_of(output->compositor->backend, backend, base);
-
-    g_debug("repaint output");
 }
 
-static void _enxb_renderer_flush_damage(struct weston_surface *surface)
+static void
+_enxb_renderer_flush_damage(struct weston_surface *surface)
 {
-    ENXBBackend *backend = wl_container_of(surface->compositor->backend, backend, base);
-    g_debug("flush damage");
 }
 
-static gboolean _enxb_surface_attach_shm(ENXBBackendSurface *surface, struct wl_shm_buffer *buffer)
+static gboolean
+_enxb_surface_attach_shm(ENXBBackendSurface *surface, struct wl_shm_buffer *buffer)
 {
     cairo_format_t format;
     switch ( wl_shm_buffer_get_format(buffer) )
@@ -187,45 +180,10 @@ static gboolean _enxb_surface_attach_shm(ENXBBackendSurface *surface, struct wl_
         format = CAIRO_FORMAT_RGB30;
     break;
     default:
-        weston_log("Unsupported SHM buffer format\n");
+        g_warning("Unsupported SHM buffer format");
         return FALSE;
     }
 
-#if 0
-    gsize size;
-
-    size = wl_shm_buffer_get_height(shm_buffer) * wl_shm_buffer_get_stride(shm_buffer);
-
-    /* Create SHM segment and attach it */
-    surface->shm_fd = shm_open("/eventd-nd-x11-bridge-view", O_CREAT|O_RDWR, 0600);
-    if ( surface->shm_fd == -1 )
-    {
-        g_warning("Could not create SHM: %s", g_strerror(errno));
-        goto err;
-    }
-    shm_unlink("/eventd/nd/x11/bridge/view");
-    if ( ftruncate(surface->shm_fd, size) < 0 )
-    {
-        g_warning("Could not truncate SHM: %s", g_strerror(errno));
-        g_close(surface->shm_fd, NULL);
-        goto err;
-    }
-    void *buf;
-
-    buf = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, surface->shm_fd, 0);
-    if ( buf == (void *) -1 )
-    {
-        g_warning("Could not mmap() SHM: %s", g_strerror(errno));
-        goto err;
-    }
-    memset(buf, 255, size);
-    //memcpy(buf, wl_shm_buffer_get_data(shm_buffer), size);
-    //char *b = buf;
-    //gsize s = wl_shm_buffer_get_stride(shm_buffer);
-    //for ( gsize i = 0; i < size ; ++i)
-        //g_print("%s%02hhx", i%s==0? "\n":i%4==0?" ":"", b[i]);
-    g_debug("COPIED buffer");
-#endif
 
     gint stride = wl_shm_buffer_get_stride(buffer);
     surface->size.width = wl_shm_buffer_get_width(buffer);
@@ -239,7 +197,8 @@ static gboolean _enxb_surface_attach_shm(ENXBBackendSurface *surface, struct wl_
     return TRUE;
 }
 
-static void _enxb_renderer_attach(struct weston_surface *wsurface, struct weston_buffer *buffer)
+static void
+_enxb_renderer_attach(struct weston_surface *wsurface, struct weston_buffer *buffer)
 {
     ENXBBackend *backend = wl_container_of(wsurface->compositor->backend, backend, base);
     ENXBBackendSurface *surface = _enxb_backend_surface_from_weston_surface(backend, wsurface);
@@ -256,16 +215,14 @@ static void _enxb_renderer_attach(struct weston_surface *wsurface, struct weston
     weston_buffer_reference(&surface->buffer_ref, NULL);
 }
 
-static void _enxb_renderer_surface_set_color(struct weston_surface *surface, float red, float green, float blue, float alpha)
+static void
+_enxb_renderer_surface_set_color(struct weston_surface *surface, float red, float green, float blue, float alpha)
 {
-    ENXBBackend *backend = wl_container_of(surface->compositor->backend, backend, base);
-
 }
 
-static void _enxb_renderer_destroy(struct weston_compositor *compositor)
+static void
+_enxb_renderer_destroy(struct weston_compositor *compositor)
 {
-    ENXBBackend *backend = wl_container_of(compositor->backend, backend, base);
-
 }
 
 
@@ -273,7 +230,6 @@ static void _enxb_renderer_destroy(struct weston_compositor *compositor)
 static void
 _enxb_renderer_surface_get_content_size(struct weston_surface *surface, int *width, int *height)
 {
-    ENXBBackend *backend = wl_container_of(surface->compositor->backend, backend, base);
     *width = 0;
     *height = 0;
 }
@@ -282,7 +238,6 @@ _enxb_renderer_surface_get_content_size(struct weston_surface *surface, int *wid
 static int
 _enxb_renderer_surface_copy_content(struct weston_surface *surface, void *target, size_t size, int src_x, int src_y, int width, int height)
 {
-    ENXBBackend *backend = wl_container_of(surface->compositor->backend, backend, base);
     return -1;
 }
 
@@ -290,7 +245,6 @@ _enxb_renderer_surface_copy_content(struct weston_surface *surface, void *target
 static bool
 _enxb_renderer_import_dmabuf(struct weston_compositor *compositor, struct linux_dmabuf_buffer *buffer)
 {
-    ENXBBackend *backend = wl_container_of(compositor->backend, backend, base);
     return false;
 }
 
@@ -298,7 +252,6 @@ _enxb_renderer_import_dmabuf(struct weston_compositor *compositor, struct linux_
 static void
 _enxb_renderer_query_dmabuf_formats(struct weston_compositor *compositor, int **formats, int *num_formats)
 {
-    ENXBBackend *backend = wl_container_of(compositor->backend, backend, base);
     *formats = NULL;
     *num_formats = 0;
 }
@@ -307,7 +260,6 @@ _enxb_renderer_query_dmabuf_formats(struct weston_compositor *compositor, int **
 static void
 _enxb_renderer_query_dmabuf_modifiers(struct weston_compositor *compositor, int format, uint64_t **modifiers, int *num_modifiers)
 {
-    ENXBBackend *backend = wl_container_of(compositor->backend, backend, base);
     *modifiers = NULL;
     *num_modifiers = 0;
 }
@@ -329,16 +281,21 @@ static struct weston_renderer _enxb_renderer = {
 
 
 static int
-_enxb_backend_output_enable(struct weston_output *output) { return 0; }
+_enxb_backend_output_enable(struct weston_output *output)
+{
+    return 0;
+}
 
 static int
-_enxb_backend_output_disable(struct weston_output *output) { return 0; }
+_enxb_backend_output_disable(struct weston_output *output)
+{
+    return 0;
+}
 
 static void
 _enxb_backend_output_start_repaint_loop(struct weston_output *output)
 {
     struct timespec ts;
-    g_debug("start repaint");
 
     weston_compositor_read_presentation_clock(output->compositor, &ts);
     weston_output_finish_frame(output, &ts, WP_PRESENTATION_FEEDBACK_INVALID);
@@ -352,7 +309,6 @@ _enxb_backend_view_destroy_notify(struct wl_listener *listener, void *data)
     cairo_surface_flush(self->cairo_surface);
     cairo_surface_destroy(self->cairo_surface);
     xcb_destroy_window(self->backend->xcb_connection, self->window);
-    //xcb_free_gc(self->backend->xcb_connection, self->gc);
 
     g_hash_table_remove(self->backend->views, GINT_TO_POINTER(self->window));
 
@@ -373,25 +329,6 @@ _enxb_backend_view_new(ENXBBackend *backend, struct weston_view *view)
     xcb_void_cookie_t cookie;
     xcb_generic_error_t *err;
 
-    g_debug("CREATE WINDOW"
-            "\n    depth: %d"
-            "\n    window: %d"
-            "\n    root: %d"
-            "\n    x: %d"
-            "\n    y: %d"
-            "\n    width: %d"
-            "\n    height: %d"
-            "%s",
-              self->backend->depth,                /* depth         */
-              self->window,
-              self->backend->screen->root,         /* parent window */
-              (gint)self->view->geometry.x,
-              (gint)self->view->geometry.y,                          /* x, y          */
-              self->surface->size.width,    /* width         */
-              self->surface->size.height,   /* height        */
-
-    "\n");
-
     self->window = xcb_generate_id(self->backend->xcb_connection);
     cookie = xcb_create_window_checked(self->backend->xcb_connection,
                       self->backend->depth,                /* depth         */
@@ -405,7 +342,8 @@ _enxb_backend_view_new(ENXBBackend *backend, struct weston_view *view)
                       self->backend->visual->visual_id,    /* visual        */
                       selmask, selval);              /* masks         */
     err = xcb_request_check(self->backend->xcb_connection, cookie);
-    if (err != NULL) {
+    if ( err != NULL )
+    {
         g_warning("Failed to create window, err: %d", err->error_code);
         free(err);
         g_free(self);
@@ -414,25 +352,10 @@ _enxb_backend_view_new(ENXBBackend *backend, struct weston_view *view)
 
     self->cairo_surface = cairo_xcb_surface_create(self->backend->xcb_connection, self->window, self->backend->visual, self->surface->size.width, self->surface->size.height);
 
-#if 0
-    self->segment = xcb_generate_id(self->backend->xcb_connection);
-    cookie = xcb_shm_attach_fd_checked(self->backend->xcb_connection, self->segment, self->surface->shm_fd, 1);
-    err = xcb_request_check(self->backend->xcb_connection, cookie);
-    if (err != NULL) {
-        g_warning("Failed to attach SHM, err: %d", err->error_code);
-        free(err);
-    }
-
-    self->gc = xcb_generate_id(self->backend->xcb_connection);
-    xcb_create_gc(self->backend->xcb_connection, self->gc, self->window, 0, NULL);
-#endif
-
     self->destroy_listener.notify = _enxb_backend_view_destroy_notify;
     wl_signal_add(&self->view->destroy_signal, &self->destroy_listener);
 
     g_hash_table_insert(self->backend->views, GINT_TO_POINTER(self->window), self);
-
-    g_debug("WINDOW created");
 
     return self;
 }
@@ -453,26 +376,6 @@ _enxb_backend_view_from_weston_view(ENXBBackend *backend, struct weston_view *vi
 static void
 _enxb_backend_view_repaint(ENXBBackendView *self)
 {
-#if 0
-    xcb_void_cookie_t cookie;
-    xcb_generic_error_t *err;
-
-    cookie = xcb_shm_put_image_checked(self->backend->xcb_connection,
-                    self->window, self->gc,
-                    self->view->surface->width,
-                    self->view->surface->height,
-                    0, 0,
-                    self->view->surface->width,
-                    self->view->surface->height,
-                    0, 0, self->backend->depth, XCB_IMAGE_FORMAT_Z_PIXMAP,
-                    0, self->segment, 0);
-    err = xcb_request_check(self->backend->xcb_connection, cookie);
-    if (err != NULL) {
-        g_warning("Failed to put shm image, err: %d", err->error_code);
-        free(err);
-    }
-#endif
-
     gfloat x, y;
     weston_view_to_global_float(self->view, 0, 0, &x, &y);
 
@@ -488,9 +391,7 @@ _enxb_backend_view_repaint(ENXBBackendView *self)
 
     xcb_clear_area(self->backend->xcb_connection, TRUE, self->window, 0, 0, 0, 0);
 
-
     xcb_flush(self->backend->xcb_connection);
-    g_debug("WINDOW visible (hopefully)");
 }
 
 
@@ -499,7 +400,6 @@ _enxb_backend_output_finish_frame(gpointer user_data)
 {
     ENXBBackendOutput *output = user_data;
     struct timespec ts;
-    g_debug("start repaint");
 
     weston_compositor_read_presentation_clock(output->base.compositor, &ts);
     weston_output_finish_frame(&output->base, &ts, WP_PRESENTATION_FEEDBACK_INVALID);
@@ -515,7 +415,6 @@ _enxb_backend_output_repaint(struct weston_output *woutput, pixman_region32_t *d
     ENXBBackendOutput *output = wl_container_of(woutput, output, base);
     struct weston_view *wview;
 
-    g_debug("output repaint");
     wl_list_for_each_reverse(wview, &backend->compositor->view_list, link)
     {
         ENXBBackendView *view = _enxb_backend_view_from_weston_view(backend, wview);
@@ -557,19 +456,19 @@ _enxb_backend_output_create(struct weston_compositor *compositor, const char *na
 }
 
 static inline gint
-_eventd_nd_compute_scale_from_dpi(gdouble dpi)
+_enxb_compute_scale_from_dpi(gdouble dpi)
 {
     return (gint) ( dpi / 96. + 0.25 );
 }
 
 static inline gint
-_eventd_nd_compute_scale_from_size(gint w, gint h, gint mm_w, gint mm_h)
+_enxb_compute_scale_from_size(gint w, gint h, gint mm_w, gint mm_h)
 {
     gdouble dpi_x = ( (gdouble) w * 25.4 ) / (gdouble) mm_w;
     gdouble dpi_y = ( (gdouble) h * 25.4 ) / (gdouble) mm_h;
     gdouble dpi = MIN(dpi_x, dpi_y);
 
-    return _eventd_nd_compute_scale_from_dpi(dpi);
+    return _enxb_compute_scale_from_dpi(dpi);
 }
 
 static struct weston_head *
@@ -593,7 +492,7 @@ _enxb_backend_head_create(ENXBBackend *backend, xcb_randr_get_output_info_reply_
     woutput = weston_compositor_create_output_with_head(backend->compositor, &head->base);
     g_return_val_if_fail(woutput == (struct weston_output *) head->output, NULL);
 
-    weston_output_set_scale(woutput, _eventd_nd_compute_scale_from_size(crtc->width, crtc->height, output->mm_width, output->mm_height));
+    weston_output_set_scale(woutput, _enxb_compute_scale_from_size(crtc->width, crtc->height, output->mm_width, output->mm_height));
 
     weston_head_set_monitor_strings(&head->base, "X11", "none", NULL);
     weston_head_set_physical_size(&head->base, output->mm_width, output->mm_height);
@@ -654,7 +553,7 @@ _enxb_get_colormap(ENXBBackend *backend)
 }
 
 static void
-_enxb_check_geometry(ENXBBackend *backend)
+_enxb_check_outputs(ENXBBackend *backend)
 {
     xcb_randr_get_screen_resources_current_cookie_t rcookie;
     xcb_randr_get_screen_resources_current_reply_t *ressources;
@@ -714,7 +613,7 @@ _enxb_backend_event_callback(xcb_generic_event_t *event, gpointer user_data)
     switch ( type - backend->randr_event_base )
     {
     case XCB_RANDR_SCREEN_CHANGE_NOTIFY:
-        _enxb_check_geometry(backend);
+        _enxb_check_outputs(backend);
         return G_SOURCE_CONTINUE;
     case XCB_RANDR_NOTIFY:
         return G_SOURCE_CONTINUE;
@@ -786,7 +685,6 @@ _enxb_backend_event_callback(xcb_generic_event_t *event, gpointer user_data)
         if ( view == NULL )
             break;
 
-        g_debug("EXPOSE %p", view);
         cairo_t *cr;
         cr = cairo_create(view->cairo_surface);
         cairo_set_source_surface(cr, view->surface->cairo_surface, 0, 0);
@@ -844,13 +742,6 @@ _enxb_backend_init(struct weston_compositor *compositor, ENXBBackendConfig *conf
     xcb_intern_atom_cookie_t *ac;
     ac = xcb_ewmh_init_atoms(backend->xcb_connection, &backend->ewmh);
     xcb_ewmh_init_atoms_replies(&backend->ewmh, ac, NULL);
-
-    extension_query = xcb_get_extension_data(backend->xcb_connection, &xcb_shm_id);
-    if ( ! extension_query->present )
-    {
-        g_warning("No SHM extension");
-        return -1;
-    }
 
     extension_query = xcb_get_extension_data(backend->xcb_connection, &xcb_randr_id);
     if ( ! extension_query->present )
@@ -962,7 +853,7 @@ _enxb_backend_init(struct weston_compositor *compositor, ENXBBackendConfig *conf
     xcb_flush(backend->xcb_connection);
 
     backend->heads = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, NULL);
-    _enxb_check_geometry(backend);
+    _enxb_check_outputs(backend);
 
     backend->views = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
 
@@ -973,7 +864,7 @@ EVENTD_EXPORT int
 weston_backend_init(struct weston_compositor *compositor, struct weston_backend_config *config_base)
 {
 
-    if ( ( config_base->struct_version != EVENTD_ND_X11_BRIDGE_BACKEND_CONFIG_VERSION ) || ( config_base->struct_size > sizeof(ENXBBackendConfig) ) )
+    if ( ( config_base->struct_version != ENXB_BACKEND_CONFIG_VERSION ) || ( config_base->struct_size > sizeof(ENXBBackendConfig) ) )
         return -1;
 
     if ( ! _enxb_backend_init(compositor, (ENXBBackendConfig *) config_base) )
