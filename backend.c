@@ -80,14 +80,14 @@ typedef struct {
 typedef struct {
     struct weston_output base;
     gint finish_frame_timer;
-} ENXBBackendOutput;
+} ENXBOutput;
 
 typedef struct {
     struct weston_head base;
     struct weston_mode mode;
     struct weston_mode native;
-    ENXBBackendOutput output;
-} ENXBBackendHead;
+    ENXBOutput output;
+} ENXBHead;
 
 typedef struct {
     struct wl_listener destroy_listener;
@@ -96,22 +96,22 @@ typedef struct {
     struct weston_buffer_reference buffer_ref;
     cairo_surface_t *cairo_surface;
     struct weston_size size;
-} ENXBBackendSurface;
+} ENXBSurface;
 
 typedef struct {
     struct wl_listener destroy_listener;
     ENXBBackend *backend;
     struct weston_view *view;
-    ENXBBackendSurface *surface;
+    ENXBSurface *surface;
     xcb_window_t window;
     cairo_surface_t *cairo_surface;
     gboolean mapped;
-} ENXBBackendView;
+} ENXBView;
 
 static void
-_enxb_backend_surface_destroy_notify(struct wl_listener *listener, void *data)
+_enxb_surface_destroy_notify(struct wl_listener *listener, void *data)
 {
-    ENXBBackendSurface *self = wl_container_of(listener, self, destroy_listener);
+    ENXBSurface *self = wl_container_of(listener, self, destroy_listener);
 
     cairo_surface_destroy(self->cairo_surface);
     weston_buffer_reference(&self->buffer_ref, NULL);
@@ -119,31 +119,31 @@ _enxb_backend_surface_destroy_notify(struct wl_listener *listener, void *data)
     g_free(self);
 }
 
-static ENXBBackendSurface *
-_enxb_backend_surface_new(ENXBBackend *backend, struct weston_surface *surface)
+static ENXBSurface *
+_enxb_surface_new(ENXBBackend *backend, struct weston_surface *surface)
 {
-    ENXBBackendSurface *self;
-    self = g_new0(ENXBBackendSurface, 1);
+    ENXBSurface *self;
+    self = g_new0(ENXBSurface, 1);
     self->backend = backend;
     self->surface = surface;
 
-    self->destroy_listener.notify = _enxb_backend_surface_destroy_notify;
+    self->destroy_listener.notify = _enxb_surface_destroy_notify;
     wl_signal_add(&self->surface->destroy_signal, &self->destroy_listener);
 
     return self;
 }
 
-static ENXBBackendSurface *
-_enxb_backend_surface_from_weston_surface(ENXBBackend *backend, struct weston_surface *surface)
+static ENXBSurface *
+_enxb_surface_from_weston_surface(ENXBBackend *backend, struct weston_surface *surface)
 {
     struct wl_listener *listener;
-    ENXBBackendSurface *self;
+    ENXBSurface *self;
 
-    listener = wl_signal_get(&surface->destroy_signal, _enxb_backend_surface_destroy_notify);
+    listener = wl_signal_get(&surface->destroy_signal, _enxb_surface_destroy_notify);
     if ( listener != NULL )
         return wl_container_of(listener, self, destroy_listener);
 
-    return _enxb_backend_surface_new(backend, surface);
+    return _enxb_surface_new(backend, surface);
 }
 
 static int
@@ -163,7 +163,7 @@ _enxb_renderer_flush_damage(struct weston_surface *surface)
 }
 
 static gboolean
-_enxb_surface_attach_shm(ENXBBackendSurface *surface, struct wl_shm_buffer *buffer)
+_enxb_surface_attach_shm(ENXBSurface *surface, struct wl_shm_buffer *buffer)
 {
     cairo_format_t format;
     switch ( wl_shm_buffer_get_format(buffer) )
@@ -202,7 +202,7 @@ static void
 _enxb_renderer_attach(struct weston_surface *wsurface, struct weston_buffer *buffer)
 {
     ENXBBackend *backend = wl_container_of(wsurface->compositor->backend, backend, base);
-    ENXBBackendSurface *surface = _enxb_backend_surface_from_weston_surface(backend, wsurface);
+    ENXBSurface *surface = _enxb_surface_from_weston_surface(backend, wsurface);
     struct wl_shm_buffer *shm_buffer;
 
     weston_buffer_reference(&surface->buffer_ref, buffer);
@@ -282,9 +282,9 @@ static struct weston_renderer _enxb_renderer = {
 
 
 static void
-_enxb_backend_view_destroy_notify(struct wl_listener *listener, void *data)
+_enxb_view_destroy_notify(struct wl_listener *listener, void *data)
 {
-    ENXBBackendView *self = wl_container_of(listener, self, destroy_listener);
+    ENXBView *self = wl_container_of(listener, self, destroy_listener);
 
     cairo_surface_flush(self->cairo_surface);
     cairo_surface_destroy(self->cairo_surface);
@@ -295,14 +295,14 @@ _enxb_backend_view_destroy_notify(struct wl_listener *listener, void *data)
     g_free(self);
 }
 
-static ENXBBackendView *
-_enxb_backend_view_new(ENXBBackend *backend, struct weston_view *view)
+static ENXBView *
+_enxb_view_new(ENXBBackend *backend, struct weston_view *view)
 {
-    ENXBBackendView *self;
-    self = g_new0(ENXBBackendView, 1);
+    ENXBView *self;
+    self = g_new0(ENXBView, 1);
     self->backend = backend;
     self->view = view;
-    self->surface = _enxb_backend_surface_from_weston_surface(self->backend, self->view->surface);
+    self->surface = _enxb_surface_from_weston_surface(self->backend, self->view->surface);
 
     guint32 selmask =  XCB_CW_BACK_PIXEL | XCB_CW_BORDER_PIXEL | XCB_CW_OVERRIDE_REDIRECT | XCB_CW_EVENT_MASK | XCB_CW_COLORMAP;
     guint32 selval[] = { 0, 0, 1, XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE, backend->map };
@@ -332,7 +332,7 @@ _enxb_backend_view_new(ENXBBackend *backend, struct weston_view *view)
 
     self->cairo_surface = cairo_xcb_surface_create(self->backend->xcb_connection, self->window, self->backend->visual, self->surface->size.width, self->surface->size.height);
 
-    self->destroy_listener.notify = _enxb_backend_view_destroy_notify;
+    self->destroy_listener.notify = _enxb_view_destroy_notify;
     wl_signal_add(&self->view->destroy_signal, &self->destroy_listener);
 
     g_hash_table_insert(self->backend->views, GINT_TO_POINTER(self->window), self);
@@ -340,21 +340,21 @@ _enxb_backend_view_new(ENXBBackend *backend, struct weston_view *view)
     return self;
 }
 
-static ENXBBackendView *
-_enxb_backend_view_from_weston_view(ENXBBackend *backend, struct weston_view *view)
+static ENXBView *
+_enxb_view_from_weston_view(ENXBBackend *backend, struct weston_view *view)
 {
     struct wl_listener *listener;
-    ENXBBackendView *self;
+    ENXBView *self;
 
-    listener = wl_signal_get(&view->destroy_signal, _enxb_backend_view_destroy_notify);
+    listener = wl_signal_get(&view->destroy_signal, _enxb_view_destroy_notify);
     if ( listener != NULL )
         return wl_container_of(listener, self, destroy_listener);
 
-    return _enxb_backend_view_new(backend, view);
+    return _enxb_view_new(backend, view);
 }
 
 static void
-_enxb_backend_view_repaint(ENXBBackendView *self)
+_enxb_view_repaint(ENXBView *self)
 {
     gfloat x, y;
     weston_view_to_global_float(self->view, 0, 0, &x, &y);
@@ -375,19 +375,19 @@ _enxb_backend_view_repaint(ENXBBackendView *self)
 }
 
 static int
-_enxb_backend_output_enable(struct weston_output *output)
+_enxb_output_enable(struct weston_output *output)
 {
     return 0;
 }
 
 static int
-_enxb_backend_output_disable(struct weston_output *output)
+_enxb_output_disable(struct weston_output *output)
 {
     return 0;
 }
 
 static void
-_enxb_backend_output_start_repaint_loop(struct weston_output *output)
+_enxb_output_start_repaint_loop(struct weston_output *output)
 {
     struct timespec ts;
 
@@ -397,9 +397,9 @@ _enxb_backend_output_start_repaint_loop(struct weston_output *output)
 
 
 static int
-_enxb_backend_output_finish_frame(gpointer user_data)
+_enxb_output_finish_frame(gpointer user_data)
 {
-    ENXBBackendOutput *output = user_data;
+    ENXBOutput *output = user_data;
     struct timespec ts;
 
     weston_compositor_read_presentation_clock(output->base.compositor, &ts);
@@ -410,65 +410,65 @@ _enxb_backend_output_finish_frame(gpointer user_data)
 }
 
 static int
-_enxb_backend_output_repaint(struct weston_output *woutput, pixman_region32_t *damage, void *repaint_data)
+_enxb_output_repaint(struct weston_output *woutput, pixman_region32_t *damage, void *repaint_data)
 {
     ENXBBackend *backend = wl_container_of(woutput->compositor->backend, backend, base);
-    ENXBBackendOutput *output = wl_container_of(woutput, output, base);
+    ENXBOutput *output = wl_container_of(woutput, output, base);
     struct weston_view *wview;
 
     wl_list_for_each_reverse(wview, &backend->compositor->view_list, link)
     {
-        ENXBBackendView *view = _enxb_backend_view_from_weston_view(backend, wview);
+        ENXBView *view = _enxb_view_from_weston_view(backend, wview);
         if ( view == NULL )
             continue;
 
         if ( view->view->plane == &backend->compositor->primary_plane )
-            _enxb_backend_view_repaint(view);
+            _enxb_view_repaint(view);
     }
     wl_signal_emit(&output->base.frame_signal, &output->base);
-    output->finish_frame_timer = g_timeout_add_full(G_PRIORITY_DEFAULT, 10, _enxb_backend_output_finish_frame, output, NULL);
+    output->finish_frame_timer = g_timeout_add_full(G_PRIORITY_DEFAULT, 10, _enxb_output_finish_frame, output, NULL);
 
     return 0;
 }
 
 static void
-_enxb_backend_output_destroy(struct weston_output *woutput)
+_enxb_output_destroy(struct weston_output *woutput)
 {
-    ENXBBackendHead *head = wl_container_of(woutput, head, output.base);
+    ENXBHead *head = wl_container_of(woutput, head, output.base);
 
     weston_output_release(&head->output.base);
 }
 
 static struct weston_output *
-_enxb_backend_output_create(struct weston_compositor *compositor, const char *name)
+_enxb_output_create(struct weston_compositor *compositor, const char *name)
 {
     g_return_val_if_fail(name != NULL, NULL);
 
     ENXBBackend *backend = wl_container_of(compositor->backend, backend, base);
-    ENXBBackendHead *head;
+    ENXBHead *head;
 
     head = g_hash_table_lookup(backend->heads, name);
     g_return_val_if_fail(head != NULL, NULL);
 
     weston_output_init(&head->output.base, compositor, name);
 
-    head->output.base.destroy = _enxb_backend_output_destroy;
-    head->output.base.enable = _enxb_backend_output_enable;
-    head->output.base.disable = _enxb_backend_output_disable;
+    head->output.base.destroy = _enxb_output_destroy;
+    head->output.base.enable = _enxb_output_enable;
+    head->output.base.disable = _enxb_output_disable;
     head->output.base.attach_head = NULL;
-    head->output.base.start_repaint_loop = _enxb_backend_output_start_repaint_loop;
-    head->output.base.repaint = _enxb_backend_output_repaint;
+    head->output.base.start_repaint_loop = _enxb_output_start_repaint_loop;
+    head->output.base.repaint = _enxb_output_repaint;
 
     return &head->output.base;
 }
 
-static ENXBBackendHead *
-_enxb_backend_head_new(ENXBBackend *backend, const gchar *name)
+static ENXBHead *
+_enxb_head_new(ENXBBackend *backend, const gchar *name)
 {
-    ENXBBackendHead *head;
+    ENXBHead *head;
     struct weston_output *woutput;
 
-    head = g_new0(ENXBBackendHead, 1);
+    head = g_new0(ENXBHead, 1);
 
     weston_head_init(&head->base, name);
     weston_head_set_connection_status(&head->base, true);
@@ -494,9 +494,9 @@ _enxb_backend_head_new(ENXBBackend *backend, const gchar *name)
 }
 
 static void
-_enxb_backend_head_free(gpointer data)
+_enxb_head_free(gpointer data)
 {
-    ENXBBackendHead *head = data;
+    ENXBHead *head = data;
 
     weston_output_destroy(&head->output.base);
     weston_head_release(&head->base);
@@ -520,9 +520,9 @@ _enxb_compute_scale_from_size(gint w, gint h, gint mm_w, gint mm_h)
 }
 
 static void
-_enxb_backend_head_update(ENXBBackend *backend, xcb_randr_get_output_info_reply_t *output, xcb_randr_get_crtc_info_reply_t *crtc)
+_enxb_head_update(ENXBBackend *backend, xcb_randr_get_output_info_reply_t *output, xcb_randr_get_crtc_info_reply_t *crtc)
 {
-    ENXBBackendHead *head;
+    ENXBHead *head;
     gchar *name;
     gsize l = xcb_randr_get_output_info_name_length(output) + 1;
 
@@ -531,7 +531,7 @@ _enxb_backend_head_update(ENXBBackend *backend, xcb_randr_get_output_info_reply_
 
     head = g_hash_table_lookup(backend->heads, name);
     if ( head == NULL )
-        head = _enxb_backend_head_new(backend, name);
+        head = _enxb_head_new(backend, name);
 
     weston_output_set_scale(&head->output.base, _enxb_compute_scale_from_size(crtc->width, crtc->height, output->mm_width, output->mm_height));
     weston_head_set_physical_size(&head->base, output->mm_width, output->mm_height);
@@ -546,7 +546,7 @@ _enxb_backend_head_update(ENXBBackend *backend, xcb_randr_get_output_info_reply_
 }
 
 static void
-_enxb_check_outputs(ENXBBackend *backend)
+_enxb_backend_check_outputs(ENXBBackend *backend)
 {
     xcb_randr_get_screen_resources_current_cookie_t rcookie;
     xcb_randr_get_screen_resources_current_reply_t *ressources;
@@ -568,7 +568,7 @@ _enxb_check_outputs(ENXBBackend *backend)
     randr_outputs = xcb_randr_get_screen_resources_current_outputs(ressources);
 
     GHashTableIter iter;
-    ENXBBackendHead *head;
+    ENXBHead *head;
     g_hash_table_iter_init(&iter, backend->heads);
     while ( g_hash_table_iter_next(&iter, NULL, (gpointer *) &head) )
         weston_head_set_connection_status(&head->base, false);
@@ -588,7 +588,7 @@ _enxb_check_outputs(ENXBBackend *backend)
         ccookie = xcb_randr_get_crtc_info(backend->xcb_connection, output->crtc, cts);
         if ( ( crtc = xcb_randr_get_crtc_info_reply(backend->xcb_connection, ccookie, NULL) ) != NULL )
         {
-            _enxb_backend_head_update(backend, output, crtc);
+            _enxb_head_update(backend, output, crtc);
             free(crtc);
         }
         free(output);
@@ -619,7 +619,7 @@ _enxb_backend_event_callback(xcb_generic_event_t *event, gpointer user_data)
     switch ( type - backend->randr_event_base )
     {
     case XCB_RANDR_SCREEN_CHANGE_NOTIFY:
-        _enxb_check_outputs(backend);
+        _enxb_backend_check_outputs(backend);
         return G_SOURCE_CONTINUE;
     case XCB_RANDR_NOTIFY:
         return G_SOURCE_CONTINUE;
@@ -685,7 +685,7 @@ _enxb_backend_event_callback(xcb_generic_event_t *event, gpointer user_data)
     case XCB_EXPOSE:
     {
         xcb_expose_event_t *e = (xcb_expose_event_t *)event;
-        ENXBBackendView *view;
+        ENXBView *view;
 
         view = g_hash_table_lookup(backend->views, GINT_TO_POINTER(e->window));
         if ( view == NULL )
@@ -768,7 +768,7 @@ _enxb_backend_init(struct weston_compositor *compositor, ENXBBackendConfig *conf
     memcpy(&backend->config, config, config->base.struct_size);
     backend->compositor->backend = &backend->base;
 
-    backend->base.create_output = _enxb_backend_output_create;
+    backend->base.create_output = _enxb_output_create;
 
     const xcb_query_extension_reply_t *extension_query;
     gint screen;
@@ -893,8 +893,8 @@ _enxb_backend_init(struct weston_compositor *compositor, ENXBBackendConfig *conf
 
     xcb_flush(backend->xcb_connection);
 
-    backend->heads = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, _enxb_backend_head_free);
-    _enxb_check_outputs(backend);
+    backend->heads = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, _enxb_head_free);
+    _enxb_backend_check_outputs(backend);
 
     backend->views = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
 
