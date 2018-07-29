@@ -486,7 +486,6 @@ _enxb_head_new(ENXBBackend *backend, const gchar *name)
     wl_list_insert(&head->output.base.mode_list, &head->mode.link);
     head->output.base.current_mode = &head->mode;
     head->output.base.native_mode = &head->mode;
-    weston_output_enable(woutput);
 
     return head;
 }
@@ -541,6 +540,9 @@ _enxb_head_update(ENXBBackend *backend, xcb_randr_get_output_info_reply_t *outpu
     /* TODO: use crtc transform */
     weston_output_set_transform(&head->output.base, WL_OUTPUT_TRANSFORM_NORMAL);
     weston_output_move(&head->output.base, crtc->x, crtc->y);
+
+    if ( ! head->output.base.enabled )
+        weston_output_enable(&head->output.base);
 }
 
 static void
