@@ -515,41 +515,6 @@ _enxb_backend_head_create(ENXBBackend *backend, xcb_randr_get_output_info_reply_
     return &head->base;
 }
 
-static gboolean
-_enxb_get_colormap(ENXBBackend *backend)
-{
-    gboolean ret = FALSE;
-
-    backend->visual = xcb_aux_find_visual_by_attrs(backend->screen, XCB_VISUAL_CLASS_DIRECT_COLOR, 32);
-    if ( backend->visual == NULL )
-        backend->visual = xcb_aux_find_visual_by_attrs(backend->screen, XCB_VISUAL_CLASS_TRUE_COLOR, 32);
-
-    if ( backend->visual != NULL )
-    {
-        xcb_void_cookie_t c;
-        xcb_generic_error_t *e;
-        backend->map = xcb_generate_id(backend->xcb_connection);
-        c = xcb_create_colormap_checked(backend->xcb_connection, ( backend->visual->_class == XCB_VISUAL_CLASS_DIRECT_COLOR) ? XCB_COLORMAP_ALLOC_ALL : XCB_COLORMAP_ALLOC_NONE, backend->map, backend->screen->root, backend->visual->visual_id);
-        e = xcb_request_check(backend->xcb_connection, c);
-        if ( e == NULL )
-            ret = TRUE;
-        else
-        {
-            xcb_free_colormap(backend->xcb_connection, backend->map);
-            free(e);
-        }
-    }
-
-    if ( ! ret )
-    {
-        backend->visual = xcb_aux_find_visual_by_id(backend->screen, backend->screen->root_visual);
-        backend->map = backend->screen->default_colormap;
-    }
-
-    backend->depth = xcb_aux_get_depth_of_visual(backend->screen, backend->visual->visual_id);
-    return ret;
-}
-
 static void
 _enxb_check_outputs(ENXBBackend *backend)
 {
@@ -715,6 +680,41 @@ _enxb_backend_event_callback(xcb_generic_event_t *event, gpointer user_data)
     }
 
     return G_SOURCE_CONTINUE;
+}
+
+static gboolean
+_enxb_get_colormap(ENXBBackend *backend)
+{
+    gboolean ret = FALSE;
+
+    backend->visual = xcb_aux_find_visual_by_attrs(backend->screen, XCB_VISUAL_CLASS_DIRECT_COLOR, 32);
+    if ( backend->visual == NULL )
+        backend->visual = xcb_aux_find_visual_by_attrs(backend->screen, XCB_VISUAL_CLASS_TRUE_COLOR, 32);
+
+    if ( backend->visual != NULL )
+    {
+        xcb_void_cookie_t c;
+        xcb_generic_error_t *e;
+        backend->map = xcb_generate_id(backend->xcb_connection);
+        c = xcb_create_colormap_checked(backend->xcb_connection, ( backend->visual->_class == XCB_VISUAL_CLASS_DIRECT_COLOR) ? XCB_COLORMAP_ALLOC_ALL : XCB_COLORMAP_ALLOC_NONE, backend->map, backend->screen->root, backend->visual->visual_id);
+        e = xcb_request_check(backend->xcb_connection, c);
+        if ( e == NULL )
+            ret = TRUE;
+        else
+        {
+            xcb_free_colormap(backend->xcb_connection, backend->map);
+            free(e);
+        }
+    }
+
+    if ( ! ret )
+    {
+        backend->visual = xcb_aux_find_visual_by_id(backend->screen, backend->screen->root_visual);
+        backend->map = backend->screen->default_colormap;
+    }
+
+    backend->depth = xcb_aux_get_depth_of_visual(backend->screen, backend->visual->visual_id);
+    return ret;
 }
 
 static gboolean
