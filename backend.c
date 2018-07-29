@@ -633,29 +633,17 @@ _enxb_backend_event_callback(xcb_generic_event_t *event, gpointer user_data)
     case XCB_XKB_MAP_NOTIFY:
     {
         struct xkb_keymap *keymap = xkb_x11_keymap_new_from_device(backend->xkb_context, backend->xcb_connection, backend->xkb_device_id, XKB_KEYMAP_COMPILE_NO_FLAGS);
-        struct xkb_state  *state  = xkb_x11_state_new_from_device(keymap, backend->xcb_connection, backend->xkb_device_id);
-        //nk_bindings_seat_update_keymap(backend->bindings_seat, keymap, state);
+        weston_seat_update_keymap(&backend->core_seat, keymap);
         xkb_keymap_unref(keymap);
-        xkb_state_unref(state);
         return G_SOURCE_CONTINUE;
     }
     case XCB_XKB_STATE_NOTIFY:
     {
-/*
         xcb_xkb_state_notify_event_t *e = (xcb_xkb_state_notify_event_t *) event;
         struct weston_keyboard *keyboard = weston_seat_get_keyboard(&backend->core_seat);
-    xkb_state_update_mask(keyboard->xkb_state.state,
-                  get_xkb_mod_mask(b, state->baseMods),
-                  get_xkb_mod_mask(b, state->latchedMods),
-                  get_xkb_mod_mask(b, state->lockedMods),
-                  0,
-                  0,
-                  state->group);
+        xkb_state_update_mask(keyboard->xkb_state.state ,e->baseMods, e->latchedMods, e->lockedMods, e->baseGroup, e->latchedGroup, e->lockedGroup);
 
-    notify_modifiers(&b->core_seat,
-             wl_display_next_serial(b->compositor->wl_display));
-             */
-        //nk_bindings_seat_update_mask(backend->bindings_seat, NULL, e->baseMods, e->latchedMods, e->lockedMods, e->baseGroup, e->latchedGroup, e->lockedGroup);
+        notify_modifiers(&backend->core_seat, wl_display_next_serial(backend->compositor->wl_display));
         return G_SOURCE_CONTINUE;
     }
     }
@@ -845,14 +833,8 @@ _enxb_backend_init(struct weston_compositor *compositor, ENXBBackendConfig *conf
         struct xkb_keymap *keymap = xkb_x11_keymap_new_from_device(backend->xkb_context, backend->xcb_connection, backend->xkb_device_id, XKB_KEYMAP_COMPILE_NO_FLAGS);
         if ( keymap != NULL )
         {
-            struct xkb_state *state = xkb_x11_state_new_from_device(keymap, backend->xcb_connection, backend->xkb_device_id);
-            if ( state != NULL )
-            {
-                weston_seat_init_keyboard(&backend->core_seat, keymap);
-                /* TODO: update state too */
-                backend->xkb = TRUE;
-                xkb_state_unref(state);
-            }
+            weston_seat_init_keyboard(&backend->core_seat, keymap);
+            backend->xkb = TRUE;
             xkb_keymap_unref(keymap);
         }
     }
