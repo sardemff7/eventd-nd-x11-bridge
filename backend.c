@@ -281,27 +281,6 @@ static struct weston_renderer _enxb_renderer = {
 };
 
 
-static int
-_enxb_backend_output_enable(struct weston_output *output)
-{
-    return 0;
-}
-
-static int
-_enxb_backend_output_disable(struct weston_output *output)
-{
-    return 0;
-}
-
-static void
-_enxb_backend_output_start_repaint_loop(struct weston_output *output)
-{
-    struct timespec ts;
-
-    weston_compositor_read_presentation_clock(output->compositor, &ts);
-    weston_output_finish_frame(output, &ts, WP_PRESENTATION_FEEDBACK_INVALID);
-}
-
 static void
 _enxb_backend_view_destroy_notify(struct wl_listener *listener, void *data)
 {
@@ -393,6 +372,27 @@ _enxb_backend_view_repaint(ENXBBackendView *self)
     xcb_clear_area(self->backend->xcb_connection, TRUE, self->window, 0, 0, 0, 0);
 
     xcb_flush(self->backend->xcb_connection);
+}
+
+static int
+_enxb_backend_output_enable(struct weston_output *output)
+{
+    return 0;
+}
+
+static int
+_enxb_backend_output_disable(struct weston_output *output)
+{
+    return 0;
+}
+
+static void
+_enxb_backend_output_start_repaint_loop(struct weston_output *output)
+{
+    struct timespec ts;
+
+    weston_compositor_read_presentation_clock(output->compositor, &ts);
+    weston_output_finish_frame(output, &ts, WP_PRESENTATION_FEEDBACK_INVALID);
 }
 
 
