@@ -44,7 +44,17 @@ typedef struct {
 static int
 _enxb_log(const char *format, va_list args)
 {
-    return vfprintf(stderr, format, args);
+    gsize l;
+    gchar *format_;
+    l = strlen(format);
+    if ( format[l-1] == '\n' )
+    {
+        format_ = g_alloca(l);
+        g_snprintf(format_, l, "%s", format);
+        format = format_;
+    }
+    g_logv("libweston", G_LOG_LEVEL_DEBUG, format, args);
+    return 0;
 }
 
 static void
@@ -84,7 +94,7 @@ static void
 _enxb_exit(struct weston_compositor *compositor)
 {
     ENXBContext *context = weston_compositor_get_user_data(compositor);
-    wl_display_terminate(context->display);
+    g_main_loop_quit(context->loop);
 }
 
 int
