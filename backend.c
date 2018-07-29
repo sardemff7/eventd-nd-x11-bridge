@@ -609,6 +609,7 @@ _enxb_backend_event_callback(xcb_generic_event_t *event, gpointer user_data)
 
     if ( event == NULL )
     {
+        weston_compositor_exit_with_code(backend->compositor, 2);
         return G_SOURCE_REMOVE;
     }
 

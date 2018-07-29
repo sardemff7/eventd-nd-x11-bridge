@@ -139,7 +139,8 @@ main()
     g_main_loop_run(context->loop);
     g_main_loop_unref(context->loop);
 
+    gint ret = context->compositor->exit_code;
     weston_compositor_destroy(context->compositor);
 
-    return 0;
+    return ret;
 }
