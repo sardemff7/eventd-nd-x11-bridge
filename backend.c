@@ -85,7 +85,6 @@ typedef struct {
 typedef struct {
     struct weston_head base;
     struct weston_mode mode;
-    struct weston_mode native;
     ENXBOutput output;
 } ENXBHead;
 
@@ -483,11 +482,10 @@ _enxb_head_new(ENXBBackend *backend, const gchar *name)
 
     head->mode.flags = WL_OUTPUT_MODE_CURRENT | WL_OUTPUT_MODE_PREFERRED;
     head->mode.refresh = 60000;
-    head->native = head->mode;
 
     wl_list_insert(&head->output.base.mode_list, &head->mode.link);
     head->output.base.current_mode = &head->mode;
-    head->output.base.native_mode = &head->native;
+    head->output.base.native_mode = &head->mode;
     weston_output_enable(woutput);
 
     return head;
