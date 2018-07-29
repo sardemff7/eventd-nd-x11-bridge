@@ -431,6 +431,14 @@ _enxb_backend_output_repaint(struct weston_output *woutput, pixman_region32_t *d
     return 0;
 }
 
+static void
+_enxb_backend_output_destroy(struct weston_output *woutput)
+{
+    ENXBBackendHead *head = wl_container_of(woutput, head, output.base);
+
+    weston_output_release(&head->output.base);
+}
+
 static struct weston_output *
 _enxb_backend_output_create(struct weston_compositor *compositor, const char *name)
 {
@@ -444,7 +452,7 @@ _enxb_backend_output_create(struct weston_compositor *compositor, const char *na
 
     weston_output_init(&head->output.base, compositor, name);
 
-    head->output.base.destroy = NULL;
+    head->output.base.destroy = _enxb_backend_output_destroy;
     head->output.base.enable = _enxb_backend_output_enable;
     head->output.base.disable = _enxb_backend_output_disable;
     head->output.base.attach_head = NULL;
@@ -452,6 +460,47 @@ _enxb_backend_output_create(struct weston_compositor *compositor, const char *na
     head->output.base.repaint = _enxb_backend_output_repaint;
 
     return &head->output.base;
+}
+
+static ENXBBackendHead *
+_enxb_backend_head_new(ENXBBackend *backend, const gchar *name)
+{
+    ENXBBackendHead *head;
+    struct weston_output *woutput;
+
+    head = g_new0(ENXBBackendHead, 1);
+
+    weston_head_init(&head->base, name);
+    weston_head_set_connection_status(&head->base, true);
+    weston_compositor_add_head(backend->compositor, &head->base);
+
+    g_hash_table_insert(backend->heads, head->base.name, head);
+
+    woutput = weston_compositor_create_output_with_head(backend->compositor, &head->base);
+    g_return_val_if_fail(woutput == &head->output.base, NULL);
+
+    weston_head_set_monitor_strings(&head->base, "X11", "none", NULL);
+
+    head->mode.flags = WL_OUTPUT_MODE_CURRENT | WL_OUTPUT_MODE_PREFERRED;
+    head->mode.refresh = 60000;
+    head->native = head->mode;
+
+    wl_list_insert(&head->output.base.mode_list, &head->mode.link);
+    head->output.base.current_mode = &head->mode;
+    head->output.base.native_mode = &head->native;
+    weston_output_enable(woutput);
+
+    return head;
+}
+
+static void
+_enxb_backend_head_free(gpointer data)
+{
+    ENXBBackendHead *head = data;
+
+    weston_output_destroy(&head->output.base);
+    weston_head_release(&head->base);
+    g_free(head);
 }
 
 static inline gint
@@ -470,50 +519,30 @@ _enxb_compute_scale_from_size(gint w, gint h, gint mm_w, gint mm_h)
     return _enxb_compute_scale_from_dpi(dpi);
 }
 
-static struct weston_head *
-_enxb_backend_head_create(ENXBBackend *backend, xcb_randr_get_output_info_reply_t *output, xcb_randr_get_crtc_info_reply_t *crtc)
+static void
+_enxb_backend_head_update(ENXBBackend *backend, xcb_randr_get_output_info_reply_t *output, xcb_randr_get_crtc_info_reply_t *crtc)
 {
     ENXBBackendHead *head;
-    struct weston_output *woutput;
     gchar *name;
     gsize l = xcb_randr_get_output_info_name_length(output) + 1;
 
-    head = g_new0(ENXBBackendHead, 1);
     name = g_newa(gchar, l);
     g_snprintf(name, l, "%s", (const gchar *) xcb_randr_get_output_info_name(output));
 
-    weston_head_init(&head->base, name);
-    weston_head_set_connection_status(&head->base, true);
-    weston_compositor_add_head(backend->compositor, &head->base);
+    head = g_hash_table_lookup(backend->heads, name);
+    if ( head == NULL )
+        head = _enxb_backend_head_new(backend, name);
 
-    g_hash_table_insert(backend->heads, head->base.name, head);
-
-    woutput = weston_compositor_create_output_with_head(backend->compositor, &head->base);
-    g_return_val_if_fail(woutput == &head->output.base, NULL);
-
-    weston_output_set_scale(woutput, _enxb_compute_scale_from_size(crtc->width, crtc->height, output->mm_width, output->mm_height));
-
-    weston_head_set_monitor_strings(&head->base, "X11", "none", NULL);
+    weston_output_set_scale(&head->output.base, _enxb_compute_scale_from_size(crtc->width, crtc->height, output->mm_width, output->mm_height));
     weston_head_set_physical_size(&head->base, output->mm_width, output->mm_height);
-
-    head->mode.flags = WL_OUTPUT_MODE_CURRENT | WL_OUTPUT_MODE_PREFERRED;
 
     head->mode.width = crtc->width;
     head->mode.height = crtc->height;
-    head->mode.refresh = 60000;
-    head->native = head->mode;
-    wl_list_insert(&head->output.base.mode_list, &head->mode.link);
-
-    head->output.base.current_mode = &head->mode;
-    head->output.base.native_mode = &head->native;
     head->output.base.native_scale = head->output.base.scale;
 
-    weston_output_set_transform(woutput, WL_OUTPUT_TRANSFORM_NORMAL);
-    weston_output_enable(woutput);
-
-    weston_output_move(woutput, crtc->x, crtc->y);
-
-    return &head->base;
+    /* TODO: use crtc transform */
+    weston_output_set_transform(&head->output.base, WL_OUTPUT_TRANSFORM_NORMAL);
+    weston_output_move(&head->output.base, crtc->x, crtc->y);
 }
 
 static void
@@ -538,6 +567,12 @@ _enxb_check_outputs(ENXBBackend *backend)
     length = xcb_randr_get_screen_resources_current_outputs_length(ressources);
     randr_outputs = xcb_randr_get_screen_resources_current_outputs(ressources);
 
+    GHashTableIter iter;
+    ENXBBackendHead *head;
+    g_hash_table_iter_init(&iter, backend->heads);
+    while ( g_hash_table_iter_next(&iter, NULL, (gpointer *) &head) )
+        weston_head_set_connection_status(&head->base, false);
+
     xcb_randr_get_output_info_reply_t *output;
     xcb_randr_get_crtc_info_reply_t *crtc;
     for ( i = 0 ; i < length ; ++i )
@@ -553,10 +588,17 @@ _enxb_check_outputs(ENXBBackend *backend)
         ccookie = xcb_randr_get_crtc_info(backend->xcb_connection, output->crtc, cts);
         if ( ( crtc = xcb_randr_get_crtc_info_reply(backend->xcb_connection, ccookie, NULL) ) != NULL )
         {
-            _enxb_backend_head_create(backend, output, crtc);
+            _enxb_backend_head_update(backend, output, crtc);
             free(crtc);
         }
         free(output);
+    }
+
+    g_hash_table_iter_init(&iter, backend->heads);
+    while ( g_hash_table_iter_next(&iter, NULL, (gpointer *) &head) )
+    {
+        if ( ! weston_head_is_connected(&head->base) )
+            g_hash_table_iter_remove(&iter);
     }
 }
 
@@ -851,7 +893,7 @@ _enxb_backend_init(struct weston_compositor *compositor, ENXBBackendConfig *conf
 
     xcb_flush(backend->xcb_connection);
 
-    backend->heads = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, NULL);
+    backend->heads = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, _enxb_backend_head_free);
     _enxb_check_outputs(backend);
 
     backend->views = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
