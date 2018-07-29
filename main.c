@@ -61,9 +61,13 @@ static void
 _enxb_load_notification_area(ENXBContext *context)
 {
     GModule *mod;
-    const gchar *path = WESTON_PLUGINS_DIR G_DIR_SEPARATOR_S "notification-area.so";
+    const gchar *path;
     int argc = 0;
     int (*init)(struct weston_compositor *compositor, int *argc, char *argv[]);
+
+    path = g_getenv("EVENTD_ND_X11_BRIDGE_PLUGIN");
+    if ( path == NULL )
+        path = WESTON_PLUGINS_DIR G_DIR_SEPARATOR_S "notification-area.so";
 
     g_debug("Try weston plugin %s", path);
     mod = g_module_open(path, G_MODULE_BIND_LOCAL | G_MODULE_BIND_LAZY);
