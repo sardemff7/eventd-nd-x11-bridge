@@ -86,7 +86,7 @@ typedef struct {
     struct weston_head base;
     struct weston_mode mode;
     struct weston_mode native;
-    ENXBBackendOutput *output;
+    ENXBBackendOutput output;
 } ENXBBackendHead;
 
 typedef struct {
@@ -441,18 +441,16 @@ _enxb_backend_output_create(struct weston_compositor *compositor, const char *na
     head = g_hash_table_lookup(backend->heads, name);
     g_return_val_if_fail(head != NULL, NULL);
 
-    head->output = g_new0(ENXBBackendOutput, 1);
+    weston_output_init(&head->output.base, compositor, name);
 
-    weston_output_init(&head->output->base, compositor, name);
+    head->output.base.destroy = NULL;
+    head->output.base.enable = _enxb_backend_output_enable;
+    head->output.base.disable = _enxb_backend_output_disable;
+    head->output.base.attach_head = NULL;
+    head->output.base.start_repaint_loop = _enxb_backend_output_start_repaint_loop;
+    head->output.base.repaint = _enxb_backend_output_repaint;
 
-    head->output->base.destroy = NULL;
-    head->output->base.enable = _enxb_backend_output_enable;
-    head->output->base.disable = _enxb_backend_output_disable;
-    head->output->base.attach_head = NULL;
-    head->output->base.start_repaint_loop = _enxb_backend_output_start_repaint_loop;
-    head->output->base.repaint = _enxb_backend_output_repaint;
-
-    return &head->output->base;
+    return &head->output.base;
 }
 
 static inline gint
@@ -490,7 +488,7 @@ _enxb_backend_head_create(ENXBBackend *backend, xcb_randr_get_output_info_reply_
     g_hash_table_insert(backend->heads, head->base.name, head);
 
     woutput = weston_compositor_create_output_with_head(backend->compositor, &head->base);
-    g_return_val_if_fail(woutput == (struct weston_output *) head->output, NULL);
+    g_return_val_if_fail(woutput == &head->output.base, NULL);
 
     weston_output_set_scale(woutput, _enxb_compute_scale_from_size(crtc->width, crtc->height, output->mm_width, output->mm_height));
 
@@ -499,15 +497,15 @@ _enxb_backend_head_create(ENXBBackend *backend, xcb_randr_get_output_info_reply_
 
     head->mode.flags = WL_OUTPUT_MODE_CURRENT | WL_OUTPUT_MODE_PREFERRED;
 
-    head->mode.width = /* head->output->base.scale */ crtc->width;
-    head->mode.height = /* head->output->base.scale */ crtc->height;
+    head->mode.width = crtc->width;
+    head->mode.height = crtc->height;
     head->mode.refresh = 60000;
     head->native = head->mode;
-    wl_list_insert(&head->output->base.mode_list, &head->mode.link);
+    wl_list_insert(&head->output.base.mode_list, &head->mode.link);
 
-    head->output->base.current_mode = &head->mode;
-    head->output->base.native_mode = &head->native;
-    head->output->base.native_scale = head->output->base.scale;
+    head->output.base.current_mode = &head->mode;
+    head->output.base.native_mode = &head->native;
+    head->output.base.native_scale = head->output.base.scale;
 
     weston_output_set_transform(woutput, WL_OUTPUT_TRANSFORM_NORMAL);
     weston_output_enable(woutput);
