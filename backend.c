@@ -100,6 +100,7 @@ typedef struct {
 
 typedef struct {
     struct wl_listener destroy_listener;
+    struct wl_listener surface_destroy_listener;
     ENXBBackend *backend;
     struct weston_view *view;
     ENXBSurface *surface;
@@ -330,6 +331,15 @@ _enxb_view_destroy_notify(struct wl_listener *listener, void *data)
     g_hash_table_remove(self->backend->views, GINT_TO_POINTER(self->window));
 
     g_free(self);
+};
+
+
+static void
+_enxb_view_surface_destroy_notify(struct wl_listener *listener, void *data)
+{
+    ENXBView *self = wl_container_of(listener, self, surface_destroy_listener);
+
+    self->surface = NULL;
 }
 
 static ENXBView *
@@ -371,6 +381,8 @@ _enxb_view_new(ENXBBackend *backend, struct weston_view *view)
 
     self->destroy_listener.notify = _enxb_view_destroy_notify;
     wl_signal_add(&self->view->destroy_signal, &self->destroy_listener);
+    self->surface_destroy_listener.notify = _enxb_view_surface_destroy_notify;
+    wl_signal_add(&self->surface->surface->destroy_signal, &self->surface_destroy_listener);
 
     g_hash_table_insert(self->backend->views, GINT_TO_POINTER(self->window), self);
 
