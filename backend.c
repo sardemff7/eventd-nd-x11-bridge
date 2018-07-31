@@ -267,10 +267,21 @@ _enxb_renderer_destroy(struct weston_compositor *compositor)
 
 /** See weston_surface_get_content_size() */
 static void
-_enxb_renderer_surface_get_content_size(struct weston_surface *surface, int *width, int *height)
+_enxb_renderer_surface_get_content_size(struct weston_surface *wsurface, int *width, int *height)
 {
-    *width = 0;
-    *height = 0;
+    ENXBBackend *backend = wl_container_of(wsurface->compositor->backend, backend, base);
+    ENXBSurface *surface = _enxb_surface_from_weston_surface(backend, wsurface);
+
+    if ( surface->cairo_surface!= NULL )
+    {
+        *width = surface->size.width;
+        *height = surface->size.height;
+    }
+    else
+    {
+        *width = 0;
+        *height = 0;
+    }
 }
 
 /** See weston_surface_copy_content() */
