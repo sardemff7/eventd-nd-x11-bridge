@@ -756,6 +756,22 @@ _enxb_get_colormap(ENXBBackend *backend)
     return ret;
 }
 
+static void
+_enxb_backend_destroy(struct weston_compositor *compositor)
+{
+    ENXBBackend *backend = wl_container_of(compositor->backend, backend, base);
+
+    if ( backend->custom_map )
+        xcb_free_colormap(backend->xcb_connection, backend->map);
+
+    g_hash_table_unref(backend->views);
+    g_hash_table_unref(backend->heads);
+
+    g_water_xcb_source_free(backend->source);
+
+    g_free(backend);
+}
+
 static gboolean
 _enxb_backend_init(struct weston_compositor *compositor, ENXBBackendConfig *config)
 {
@@ -765,6 +781,7 @@ _enxb_backend_init(struct weston_compositor *compositor, ENXBBackendConfig *conf
     backend->compositor->backend = &backend->base;
 
     backend->base.create_output = _enxb_output_create;
+    backend->base.destroy = _enxb_backend_destroy;
 
     const xcb_query_extension_reply_t *extension_query;
     gint screen;
@@ -891,7 +908,7 @@ _enxb_backend_init(struct weston_compositor *compositor, ENXBBackendConfig *conf
     return TRUE;
 
 fail:
-    if ( backend->source )
+    if ( backend->source != NULL )
         g_water_xcb_source_free(backend->source);
     g_free(backend);
     return FALSE;
