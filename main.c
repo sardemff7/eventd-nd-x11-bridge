@@ -21,6 +21,7 @@
  */
 
 #include <config.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
@@ -120,7 +121,15 @@ main()
 
     context->backend_config.base.struct_version = ENXB_BACKEND_CONFIG_VERSION;
     context->backend_config.base.struct_size = sizeof(ENXBBackendConfig);
-    g_setenv("WESTON_MODULE_MAP", "x11-backend.so=" BUILD_DIR G_DIR_SEPARATOR_S "eventd-nd-x11-bridge." G_MODULE_SUFFIX, TRUE);
+
+    gint e;
+    gchar link[] = BUILD_DIR G_DIR_SEPARATOR_S;
+    e = readlink("/proc/self/exe", link, sizeof(link));
+    if ( ( e < 0 ) || g_str_has_prefix(link, BUILD_DIR G_DIR_SEPARATOR_S) )
+        g_setenv("WESTON_MODULE_MAP", "x11-backend.so=" BUILD_DIR G_DIR_SEPARATOR_S "eventd-nd-x11-bridge." G_MODULE_SUFFIX, TRUE);
+    else
+        g_setenv("WESTON_MODULE_MAP", "x11-backend.so=" LIBWESTON_PLUGINS_DIR G_DIR_SEPARATOR_S "eventd-nd-x11-bridge." G_MODULE_SUFFIX, TRUE);
+
     if ( weston_compositor_load_backend(context->compositor, WESTON_BACKEND_X11, &context->backend_config.base) < 0 )
         return 1;
 
