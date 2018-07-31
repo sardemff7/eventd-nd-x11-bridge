@@ -94,6 +94,7 @@ typedef struct {
     struct weston_surface *surface;
     struct weston_buffer_reference buffer_ref;
     cairo_surface_t *cairo_surface;
+    struct wl_listener buffer_destroy_listener;
     struct weston_size size;
 } ENXBSurface;
 
@@ -112,10 +113,26 @@ _enxb_surface_destroy_notify(struct wl_listener *listener, void *data)
 {
     ENXBSurface *self = wl_container_of(listener, self, destroy_listener);
 
-    cairo_surface_destroy(self->cairo_surface);
+    if ( self->buffer_destroy_listener.notify != NULL )
+    {
+        wl_list_remove(&self->buffer_destroy_listener.link);
+        self->buffer_destroy_listener.notify = NULL;
+    }
+    if ( self->cairo_surface != NULL )
+        cairo_surface_destroy(self->cairo_surface);
+
     weston_buffer_reference(&self->buffer_ref, NULL);
 
     g_free(self);
+}
+
+static void
+_enxb_surface_buffer_destroy_notify(struct wl_listener *listener, void *data)
+{
+    ENXBSurface *self = wl_container_of(listener, self, buffer_destroy_listener);
+
+    cairo_surface_destroy(self->cairo_surface);
+    self->cairo_surface = NULL;
 }
 
 static ENXBSurface *
@@ -191,7 +208,11 @@ _enxb_surface_attach_shm(ENXBSurface *surface, struct wl_shm_buffer *buffer)
 
     surface->cairo_surface = cairo_image_surface_create_for_data(wl_shm_buffer_get_data(buffer), format, surface->size.width, surface->size.height, stride);
     if ( cairo_surface_status(surface->cairo_surface) != CAIRO_STATUS_SUCCESS )
+    {
+        cairo_surface_destroy(surface->cairo_surface);
+        surface->cairo_surface = NULL;
         return FALSE;
+    }
 
     weston_compositor_schedule_repaint(surface->backend->compositor);
     return TRUE;
@@ -203,16 +224,33 @@ _enxb_renderer_attach(struct weston_surface *wsurface, struct weston_buffer *buf
     ENXBBackend *backend = wl_container_of(wsurface->compositor->backend, backend, base);
     ENXBSurface *surface = _enxb_surface_from_weston_surface(backend, wsurface);
     struct wl_shm_buffer *shm_buffer;
+    gboolean ret = FALSE;
+
+    if ( surface->buffer_destroy_listener.notify != NULL )
+    {
+        wl_list_remove(&surface->buffer_destroy_listener.link);
+        surface->buffer_destroy_listener.notify = NULL;
+    }
+
+    if ( surface->cairo_surface != NULL )
+    {
+        cairo_surface_destroy(surface->cairo_surface);
+        surface->cairo_surface = NULL;
+    }
 
     weston_buffer_reference(&surface->buffer_ref, buffer);
 
     shm_buffer = wl_shm_buffer_get(buffer->resource);
     if ( shm_buffer != NULL )
+        ret = _enxb_surface_attach_shm(surface, shm_buffer);
+
+    if ( ret )
     {
-        if ( _enxb_surface_attach_shm(surface, shm_buffer) )
-            return;
+        surface->buffer_destroy_listener.notify = _enxb_surface_buffer_destroy_notify;
+        wl_signal_add(&buffer->destroy_signal, &surface->buffer_destroy_listener);
     }
-    weston_buffer_reference(&surface->buffer_ref, NULL);
+    else
+        weston_buffer_reference(&surface->buffer_ref, NULL);
 }
 
 static void
@@ -362,10 +400,15 @@ _enxb_view_repaint(ENXBView *self)
     guint32 vals[] = { x, y };
     xcb_configure_window(self->backend->xcb_connection, self->window, mask, vals);
 
-    if ( ! self->mapped )
+    if ( ( ! self->mapped ) && ( self->surface != NULL ) && ( self->surface->cairo_surface != NULL ) )
     {
         xcb_map_window(self->backend->xcb_connection, self->window);
         self->mapped = TRUE;
+    }
+    else if ( ( self->mapped ) && ( ( self->surface == NULL ) || ( self->surface->cairo_surface == NULL ) ) )
+    {
+        xcb_unmap_window(self->backend->xcb_connection, self->window);
+        self->mapped = FALSE;
     }
 
     xcb_clear_area(self->backend->xcb_connection, TRUE, self->window, 0, 0, 0, 0);
@@ -684,7 +727,7 @@ _enxb_backend_event_callback(xcb_generic_event_t *event, gpointer user_data)
         ENXBView *view;
 
         view = g_hash_table_lookup(backend->views, GINT_TO_POINTER(e->window));
-        if ( view == NULL )
+        if ( ( view == NULL ) || ( view->surface == NULL ) || ( view->surface->cairo_surface == NULL ) )
             break;
 
         cairo_t *cr;
