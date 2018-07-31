@@ -385,6 +385,12 @@ _enxb_output_disable(struct weston_output *output)
     return 0;
 }
 
+static int
+_enxb_output_switch_mode(struct weston_output *output, struct weston_mode *mode)
+{
+    return 0;
+}
+
 static void
 _enxb_output_start_repaint_loop(struct weston_output *output)
 {
@@ -454,6 +460,7 @@ _enxb_output_create(struct weston_compositor *compositor, const char *name)
     head->output.base.destroy = _enxb_output_destroy;
     head->output.base.enable = _enxb_output_enable;
     head->output.base.disable = _enxb_output_disable;
+    head->output.base.switch_mode = _enxb_output_switch_mode;
     head->output.base.attach_head = NULL;
     head->output.base.start_repaint_loop = _enxb_output_start_repaint_loop;
     head->output.base.repaint = _enxb_output_repaint;
@@ -478,7 +485,7 @@ _enxb_head_new(ENXBBackend *backend, const gchar *name)
     woutput = weston_compositor_create_output_with_head(backend->compositor, &head->base);
     g_return_val_if_fail(woutput == &head->output.base, NULL);
 
-    weston_head_set_monitor_strings(&head->base, "X11", "none", NULL);
+    weston_head_set_monitor_strings(&head->base, "X11", name, NULL);
 
     head->mode.flags = WL_OUTPUT_MODE_CURRENT | WL_OUTPUT_MODE_PREFERRED;
     head->mode.refresh = 60000;
@@ -486,6 +493,11 @@ _enxb_head_new(ENXBBackend *backend, const gchar *name)
     wl_list_insert(&head->output.base.mode_list, &head->mode.link);
     head->output.base.current_mode = &head->mode;
     head->output.base.native_mode = &head->mode;
+
+    weston_output_set_transform(&head->output.base, WL_OUTPUT_TRANSFORM_NORMAL);
+    weston_output_set_scale(&head->output.base, 1);
+
+    weston_output_enable(&head->output.base);
 
     return head;
 }
@@ -530,19 +542,14 @@ _enxb_head_update(ENXBBackend *backend, xcb_randr_get_output_info_reply_t *outpu
     if ( head == NULL )
         head = _enxb_head_new(backend, name);
 
-    weston_output_set_scale(&head->output.base, _enxb_compute_scale_from_size(crtc->width, crtc->height, output->mm_width, output->mm_height));
-    weston_head_set_physical_size(&head->base, output->mm_width, output->mm_height);
-
     head->mode.width = crtc->width;
     head->mode.height = crtc->height;
-    head->output.base.native_scale = head->output.base.scale;
 
+    weston_head_set_physical_size(&head->base, output->mm_width, output->mm_height);
     /* TODO: use crtc transform */
     weston_output_set_transform(&head->output.base, WL_OUTPUT_TRANSFORM_NORMAL);
+    weston_output_mode_set_native(&head->output.base, &head->mode, _enxb_compute_scale_from_size(crtc->width, crtc->height, output->mm_width, output->mm_height));
     weston_output_move(&head->output.base, crtc->x, crtc->y);
-
-    if ( ! head->output.base.enabled )
-        weston_output_enable(&head->output.base);
 }
 
 static void
